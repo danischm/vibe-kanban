@@ -5,12 +5,17 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Workspace } from 'shared/types';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
-import { buildIssueCreatePath } from '@/shared/lib/routes/projectSidebarRoutes';
+import { getDestinationHostId } from '@/shared/lib/routes/appNavigation';
+import {
+  buildKanbanIssueComposerKey,
+  openKanbanIssueComposer,
+  type ProjectIssueCreateOptions,
+} from '@/shared/stores/useKanbanIssueComposerStore';
 import {
   type ActionDefinition,
   type ActionExecutorContext,
@@ -26,14 +31,23 @@ import { useDevServer } from '@/shared/hooks/useDevServer';
 import { useLogsPanel } from '@/shared/hooks/useLogsPanel';
 import { useLogStream } from '@/shared/hooks/useLogStream';
 import { ActionsContext } from '@/shared/hooks/useActions';
+import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 
 interface ActionsProviderProps {
   children: ReactNode;
 }
 
 export function ActionsProvider({ children }: ActionsProviderProps) {
-  const navigate = useNavigate();
+  const runtime = useAppRuntime();
+  const appNavigation = useAppNavigation();
   const { projectId } = useParams({ strict: false });
+  const currentDestination = useCurrentAppDestination();
+  const hostId = useMemo(
+    () => getDestinationHostId(currentDestination),
+    [currentDestination]
+  );
   const queryClient = useQueryClient();
   // Get selected organization ID from store (for kanban context)
   const selectedOrgId = useOrganizationStore((s) => s.selectedOrgId);
@@ -64,11 +78,17 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
 
   // Navigate to create issue mode (URL-based navigation)
   const navigateToCreateIssue = useCallback(
-    (options?: Parameters<typeof buildIssueCreatePath>[1]) => {
-      if (!projectId) return;
-      navigate(buildIssueCreatePath(projectId, options));
+    (options?: ProjectIssueCreateOptions) => {
+      if (!projectId) {
+        return;
+      }
+
+      openKanbanIssueComposer(
+        buildKanbanIssueComposerKey(hostId, projectId),
+        options
+      );
     },
-    [navigate, projectId]
+    [projectId, hostId]
   );
 
   // Get logs panel state
@@ -185,7 +205,8 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
   // Build executor context from hooks
   const executorContext = useMemo<ActionExecutorContext>(() => {
     return {
-      navigate,
+      runtime,
+      appNavigation,
       queryClient,
       selectWorkspace,
       activeWorkspaces,
@@ -210,7 +231,7 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
       remoteWorkspaces: userCtx?.workspaces ?? [],
     };
   }, [
-    navigate,
+    runtime,
     queryClient,
     selectWorkspace,
     activeWorkspaces,
