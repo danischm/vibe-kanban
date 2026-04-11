@@ -51,8 +51,10 @@ ENV SENTRY_DSN_REMOTE=${SENTRY_DSN_REMOTE}
 RUN apt-get update \
   && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates git openssh-client \
   && mkdir -p -m 0700 /root/.ssh \
-  && ssh-keyscan github.com >> /root/.ssh/known_hosts \
+  && ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts \
   && chmod 600 /root/.ssh/known_hosts \
+  && printf 'Host github.com\n  Hostname ssh.github.com\n  Port 443\n  User git\n' > /root/.ssh/config \
+  && chmod 600 /root/.ssh/config \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
