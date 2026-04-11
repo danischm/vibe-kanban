@@ -15,7 +15,7 @@ import { ExecutionProcessesProvider } from '@/shared/providers/ExecutionProcesse
 import { ApprovalFeedbackProvider } from '@/features/workspace-chat/model/contexts/ApprovalFeedbackContext';
 import { EntriesProvider } from '@/features/workspace-chat/model/contexts/EntriesContext';
 import { MessageEditProvider } from '@/features/workspace-chat/model/contexts/MessageEditContext';
-import { CreateModeProvider } from '@/integrations/CreateModeProvider';
+import { CreateModeProvider } from '@/features/create-mode/model/CreateModeProvider';
 import { useWorkspaceSessions } from '@/shared/hooks/useWorkspaceSessions';
 import { useWorkspaceRecord } from '@/shared/hooks/useWorkspaceRecord';
 import { SessionChatBoxContainer } from '@/features/workspace-chat/ui/SessionChatBoxContainer';
@@ -211,9 +211,20 @@ function WorkspaceSessionPanel({
     conversationListRef.current?.scrollToPreviousUserMessage();
   }, []);
 
-  const handleScrollToBottom = useCallback(() => {
-    conversationListRef.current?.scrollToBottom();
+  const handleScrollToUserMessage = useCallback((patchKey: string) => {
+    conversationListRef.current?.scrollToEntryByPatchKey(patchKey);
   }, []);
+
+  const handleGetActiveTurnPatchKey = useCallback(() => {
+    return conversationListRef.current?.getVisibleUserMessagePatchKey() ?? null;
+  }, []);
+
+  const handleScrollToBottom = useCallback(
+    (behavior: 'auto' | 'smooth' = 'smooth') => {
+      conversationListRef.current?.scrollToBottom(behavior);
+    },
+    []
+  );
 
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
     setIsAtBottom(atBottom);
@@ -274,9 +285,11 @@ function WorkspaceSessionPanel({
                   <div className="w-chat max-w-full h-full">
                     <RetryUiProvider workspaceId={workspaceWithSession.id}>
                       <ConversationList
+                        key={`${workspaceId}-${selectedSessionId ?? 'new'}`}
                         ref={conversationListRef}
                         attempt={workspaceWithSession}
                         onAtBottomChange={handleAtBottomChange}
+                        sessionScopeId={selectedSessionId}
                       />
                     </RetryUiProvider>
                   </div>
@@ -290,7 +303,7 @@ function WorkspaceSessionPanel({
                   <div className="w-chat max-w-full relative">
                     <button
                       type="button"
-                      onClick={handleScrollToBottom}
+                      onClick={() => handleScrollToBottom('auto')}
                       className="absolute bottom-2 right-4 z-10 pointer-events-auto flex items-center justify-center size-8 rounded-full bg-secondary/80 backdrop-blur-sm border border-secondary text-low hover:text-normal hover:bg-secondary shadow-md transition-all"
                       aria-label="Scroll to bottom"
                       title="Scroll to bottom"
@@ -331,6 +344,8 @@ function WorkspaceSessionPanel({
                   showOpenWorkspaceButton
                   onScrollToPreviousMessage={handleScrollToPreviousMessage}
                   onScrollToBottom={handleScrollToBottom}
+                  onScrollToUserMessage={handleScrollToUserMessage}
+                  getActiveTurnPatchKey={handleGetActiveTurnPatchKey}
                 />
               </div>
             </div>
@@ -444,6 +459,10 @@ export function ProjectRightSidebarContainer() {
   ]);
 
   const rightPanelState = useMemo<RightPanelState>(() => {
+    if (isCreateMode) {
+      return { kind: 'create-issue' };
+    }
+
     if (isWorkspaceCreateMode) {
       if (draftId) {
         return {
@@ -457,10 +476,6 @@ export function ProjectRightSidebarContainer() {
 
     if (workspaceId) {
       return { kind: 'issue-workspace', workspaceId };
-    }
-
-    if (isCreateMode) {
-      return { kind: 'create-issue' };
     }
 
     if (issueId) {
